@@ -1,18 +1,8 @@
 require("dotenv").config();
 const oracledb = require("oracledb");
-const fs = require("fs");
-const path = require("path");
 const consoleTable = require("console.table");
 const Anthropic = require("@anthropic-ai/sdk");
-
-// Log directories and files
-const logDir = path.resolve(__dirname, "logs");
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
-}
-
-const logFilePath = path.join(logDir, `output-${Date.now()}.log`);
-const tableLogFile = path.join(logDir, `table-${Date.now()}.log`);
+const { log, logTable, markError, hasFailed, finalize } = require("./logger");
 
 // Oracle instant client setup
 oracledb.initOracleClient({
@@ -24,14 +14,6 @@ const dbConfig = {
   user: process.env.ORACLE_USERNAME,
   password: process.env.ORACLE_PASSWORD,
   connectString: process.env.ORACLE_CONNSTRING,
-};
-
-// Log functions
-const log = (content) => {
-  fs.appendFileSync(logFilePath, content + "\n", "utf8");
-};
-const logTable = (tableString) => {
-  fs.appendFileSync(tableLogFile, `${tableString}\n`, "utf8");
 };
 
 // Anthropic client initialization
@@ -47,6 +29,7 @@ const dbConnect = async () => {
     return connection;
   } catch (err) {
     console.error("Error connecting to the database:", err);
+    markError();
     log(`Error connecting to the database: ${err.message}`);
     throw err;
   }
@@ -70,6 +53,7 @@ const dbSelect = async (connection) => {
     return result;
   } catch (err) {
     console.error("Error executing query:", err);
+    markError();
     log(`Error executing query: ${err.message}`);
     throw err;
   }
@@ -96,6 +80,7 @@ const dbWrite = async (connection, event_id, response, priority) => {
     log(`Inserted EVENT_AI entry for EVENT_ID ${event_id}`);
   } catch (err) {
     console.error("Error inserting data:", err);
+    markError();
     log(`Error inserting data for EVENT_ID ${event_id}: ${err.message}`);
   }
 };
@@ -160,6 +145,7 @@ const promptAI = async (EVENT_SUBJECT, EVENT_DESC) => {
     return response.content[0].text;
   } catch (error) {
     console.error("Error communicating with Anthropic:", error);
+    markError();
     log(`Error communicating with Anthropic: ${error.message}`);
     throw error;
   }
@@ -228,6 +214,7 @@ const processTables = async () => {
     }
   } catch (err) {
     console.error("Error occurred:", err);
+    markError();
     log(`Error occurred: ${err.message}`);
   } finally {
     if (connection) {
@@ -237,6 +224,7 @@ const processTables = async () => {
         log("Connection closed.");
       } catch (err) {
         console.error("Error closing connection:", err);
+        markError();
         log(`Error closing connection: ${err.message}`);
       }
     }
@@ -245,6 +233,10 @@ const processTables = async () => {
 
 // Execute the process
 (async () => {
-  await processTables();
-  process.exit();
+  try {
+    await processTables();
+  } finally {
+    await finalize();
+    process.exit(hasFailed() ? 1 : 0);
+  }
 })();
