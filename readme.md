@@ -10,23 +10,23 @@ Meant to run on a timer (about every 10 minutes). Each pass handles a small batc
 - Sends subject + description to Claude Haiku and expects JSON like `{"priorita":"1"}` (1 high, 2 medium, 3 low)
 - Inserts `EVENT_ID`, truncated response, and priority into `EVENT_AI`
 - Writes daily `output` / `table` logs under `logs/`, tagged `_success` or `_error`
-- Zips logs older than 30 days, deletes anything older than 90 days
+- Packs each calendar month into `logs-YYYY-MM.zip` once that month is over 30 days old; deletes archives older than 180 days (~6 months)
 
 ## Stack
 
-- Node.js, Yarn
+- Node.js, npm
 - `oracledb` (thick mode / Instant Client)
 - `@anthropic-ai/sdk`
 - `dotenv`, `console.table`
 
 ## Setup
 
-Needs Node.js LTS, Yarn, and [Oracle Instant Client](https://www.oracle.com/database/technologies/instant-client/downloads.html).
+Needs Node.js LTS, npm, and [Oracle Instant Client](https://www.oracle.com/database/technologies/instant-client/downloads.html).
 
 ```bash
 git clone https://github.com/AkiraGold/AnthropicEIRA.git
 cd AnthropicEIRA
-yarn install
+npm install
 ```
 
 Create a `.env` in the project root:
@@ -54,12 +54,13 @@ Schedule that command however you like (Task Scheduler, cron, etc.).
 ## Layout
 
 ```text
-index.js      DB select/insert, Claude prompt, main loop
-logger.js     daily logs, success/error suffixes, zip + retention
+index.js              DB select/insert, Claude prompt, main loop
+logger.js             daily logs, success/error suffixes, monthly zip + retention
+anthropicAI.service   systemd unit example
 package.json
-yarn.lock
-.env          local secrets (gitignored)
-logs/         runtime logs (gitignored)
+package-lock.json
+.env                  local secrets (gitignored)
+logs/                 runtime logs (gitignored)
 ```
 
 ## License

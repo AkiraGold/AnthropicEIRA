@@ -1,0 +1,16 @@
+[Unit]
+Description=Run the Anthropic AI Script
+
+[Service]
+ExecStart=/usr/bin/node /home/nodeuser/anthropicAI/index.js
+WorkingDirectory=/home/nodeuser/anthropicAI
+User=nodeuser
+Restart=always
+RestartSec=600
+Environment=ORACLE_LIBRARY_DIR=/home/nodeuser/oracleinstant/instantclient_23_6
+Environment=LD_LIBRARY_PATH=/home/nodeuser/oracleinstant/instantclient_23_6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

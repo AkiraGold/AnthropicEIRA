@@ -236,7 +236,7 @@ const processTables = async () => {
   try {
     await processTables();
   } finally {
-    await finalize();
+    finalize();
     process.exit(hasFailed() ? 1 : 0);
   }
 })();
