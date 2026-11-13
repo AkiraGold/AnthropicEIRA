@@ -1,40 +1,67 @@
-# Node.js Oracle Database Integration with Anthropic AI
+# AnthropicEIRA
 
-This project demonstrates the integration of Node.js with an Oracle database, using Anthropic AI for additional processing. Follow the steps below to set up and run the project.
+Scheduled Node job that reads open Oracle `EVENT` rows, asks Claude for an incident priority, and writes the answer into `EVENT_AI`.
 
-## Prerequisites
+Meant to run on a timer (about every 10 minutes). Each pass handles a small batch of events that do not already have an `EVENT_AI` row.
 
-1. **Node.js LTS**: [Download and install](https://nodejs.org/en)
-2. **Yarn Package Manager**: [Download and install](https://classic.yarnpkg.com/lang/en/docs/install/#windows-stable)
-3. **OracleSQL "thick" client**: [Download and install](https://www.oracle.com/database/technologies/instant-client/downloads.html)
+## What it does
 
-## Setup Instructions
+- Selects up to 5 pending events from Oracle (`state_id` / agenda / category filters in `index.js`)
+- Sends subject + description to Claude Haiku and expects JSON like `{"priorita":"1"}` (1 high, 2 medium, 3 low)
+- Inserts `EVENT_ID`, truncated response, and priority into `EVENT_AI`
+- Writes daily `output` / `table` logs under `logs/`, tagged `_success` or `_error`
+- Zips logs older than 30 days, deletes anything older than 90 days
 
-1. Clone this repository to your local machine.
-2. Run `yarn install` in the root directory to install dependencies.
-3. Update the `index.js` file:
-   - Modify the path to your OracleSQL "thick" client.
-4. Create a `.env` file in the root directory and add the following credentials:
+## Stack
 
-```env
-ANTHROPIC_API_KEY="insert key here"
-ORACLE_USERNAME="insert oracle db username"
-ORACLE_PASSWORD="insert oracle db password"
-ORACLE_CONNSTRING="insert oracle db connection string - example localhost:1521/xepdb1"
-If you use Linux:    ORACLE_LIBRARY_DIR="/path/to/your/thick/client"
-If you use Windows:  ORACLE_LIBRARY_DIR="C:\\Path\\to\\your\\thick\\client"
+- Node.js, Yarn
+- `oracledb` (thick mode / Instant Client)
+- `@anthropic-ai/sdk`
+- `dotenv`, `console.table`
+
+## Setup
+
+Needs Node.js LTS, Yarn, and [Oracle Instant Client](https://www.oracle.com/database/technologies/instant-client/downloads.html).
+
+```bash
+git clone https://github.com/AkiraGold/AnthropicEIRA.git
+cd AnthropicEIRA
+yarn install
 ```
 
-## Running the Project
+Create a `.env` in the project root:
 
-To execute the script, run the following command:
+```env
+ANTHROPIC_API_KEY=...
+ORACLE_USERNAME=...
+ORACLE_PASSWORD=...
+ORACLE_CONNSTRING=localhost:1521/xepdb1
+ORACLE_LIBRARY_DIR=C:\Path\to\instantclient
+```
+
+On Linux, point `ORACLE_LIBRARY_DIR` at the Instant Client folder the same way.
+
+## Scripts
+
+No npm scripts. Run the job with:
 
 ```bash
 node index.js
 ```
 
-## Notes
-- Ensure the Oracle Instant Client is properly installed and accessible from the specified path in `index.js`.
-- The `.env` file must contain valid credentials for connecting to the Oracle database and the Anthropic API.
+Schedule that command however you like (Task Scheduler, cron, etc.).
 
-Feel free to contribute or modify the project as needed!
+## Layout
+
+```text
+index.js      DB select/insert, Claude prompt, main loop
+logger.js     daily logs, success/error suffixes, zip + retention
+package.json
+yarn.lock
+.env          local secrets (gitignored)
+logs/         runtime logs (gitignored)
+```
+
+## License
+
+MIT
