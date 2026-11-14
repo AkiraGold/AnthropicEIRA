@@ -3,8 +3,10 @@ const path = require("path");
 const zlib = require("zlib");
 
 const LOG_DIR = path.resolve(__dirname, "logs");
-const ZIP_AFTER_DAYS = 30;
-const RETENTION_DAYS = 180; // ~1/2 year
+// Keep current calendar month + previous month as daily .log files
+const KEEP_LOOSE_MONTHS = 1;
+// Keep monthly zips for this many calendar months (including current)
+const RETENTION_MONTHS = 6;
 
 let outputBuffer = [];
 let tableBuffer = [];
@@ -21,20 +23,24 @@ function dateStamp(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-function daysAgo(days) {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
-
 function monthKey(date) {
   return date.toISOString().slice(0, 7); // YYYY-MM
 }
 
-function endOfMonth(yyyyMm) {
+/** Shift a YYYY-MM key by delta months (negative = past). */
+function shiftMonthKey(yyyyMm, deltaMonths) {
   const [y, m] = yyyyMm.split("-").map(Number);
-  return new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+  return monthKey(new Date(Date.UTC(y, m - 1 + deltaMonths, 1)));
+}
+
+/** Months strictly older than (current - KEEP_LOOSE_MONTHS) get zipped. */
+function firstLooseMonthKey(now = new Date()) {
+  return shiftMonthKey(monthKey(now), -KEEP_LOOSE_MONTHS);
+}
+
+/** Oldest month key still kept (inclusive). Older than this is deleted. */
+function oldestKeepMonthKey(now = new Date()) {
+  return shiftMonthKey(monthKey(now), -(RETENTION_MONTHS - 1));
 }
 
 function parseLogDate(filename) {
@@ -186,8 +192,9 @@ function zipFiles(filePaths, zipPath) {
 
 function maintainLogs() {
   ensureLogDir();
-  const zipBefore = daysAgo(ZIP_AFTER_DAYS);
-  const deleteBefore = daysAgo(RETENTION_DAYS);
+  const now = new Date();
+  const looseFrom = firstLooseMonthKey(now); // e.g. Nov → keep Oct+Nov; zip Sep and older
+  const keepFrom = oldestKeepMonthKey(now); // e.g. Nov → keep Jun..Nov; drop May and older
 
   /** @type {Map<string, string[]>} */
   const byMonth = new Map();
@@ -202,9 +209,9 @@ function maintainLogs() {
     }
     if (!stat.isFile()) continue;
 
-    const monthlyKey = name.match(/^logs-(\d{4}-\d{2})\.zip$/);
-    if (monthlyKey) {
-      if (endOfMonth(monthlyKey[1]) < deleteBefore) {
+    const monthlyMatch = name.match(/^logs-(\d{4}-\d{2})\.zip$/);
+    if (monthlyMatch) {
+      if (monthlyMatch[1] < keepFrom) {
         fs.unlinkSync(fullPath);
       }
       continue;
@@ -213,18 +220,16 @@ function maintainLogs() {
     if (!name.endsWith(".log") && !name.endsWith(".zip")) continue;
 
     const logDate = parseLogDate(name);
-    const ageDate = logDate || stat.mtime;
+    const key = logDate ? monthKey(logDate) : monthKey(stat.mtime);
 
-    if (ageDate < deleteBefore) {
+    if (key < keepFrom) {
       fs.unlinkSync(fullPath);
       continue;
     }
 
-    // Only current daily .log files are packed into the monthly archive
-    if (!logDate || !(ageDate < zipBefore)) continue;
-    if (!(endOfMonth(monthKey(logDate)) < zipBefore)) continue;
+    // Daily logs from months before the loose window → monthly zip
+    if (!logDate || key >= looseFrom) continue;
 
-    const key = monthKey(logDate);
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key).push(fullPath);
   }
@@ -262,8 +267,8 @@ function finalize() {
 
 module.exports = {
   LOG_DIR,
-  ZIP_AFTER_DAYS,
-  RETENTION_DAYS,
+  KEEP_LOOSE_MONTHS,
+  RETENTION_MONTHS,
   log,
   logTable,
   markError,

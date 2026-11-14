@@ -10,7 +10,7 @@ Meant to run on a timer (about every 10 minutes). Each pass handles a small batc
 - Sends subject + description to Claude Haiku and expects JSON like `{"priorita":"1"}` (1 high, 2 medium, 3 low)
 - Inserts `EVENT_ID`, truncated response, and priority into `EVENT_AI`
 - Writes daily `output` / `table` logs under `logs/`, tagged `_success` or `_error`
-- Packs each calendar month into `logs-YYYY-MM.zip` once that month is over 30 days old; deletes archives older than 180 days (~6 months)
+- Keeps the current and previous calendar month as daily `.log` files; older months go into `logs-YYYY-MM.zip`; drops archives older than 6 calendar months
 
 ## Stack
 
